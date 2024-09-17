@@ -1,0 +1,14 @@
+C:\Users\carlos.araujo\Documents\Visual Studio 2022\MrsChatServer\bin\x64\Release\net8.0\MrsChatServer.exe
+C:\Users\carlos.araujo\Documents\Visual Studio 2022\MrsChatServer\bin\x64\Release\net8.0\MrsChatServer.deps.json
+C:\Users\carlos.araujo\Documents\Visual Studio 2022\MrsChatServer\bin\x64\Release\net8.0\MrsChatServer.runtimeconfig.json
+C:\Users\carlos.araujo\Documents\Visual Studio 2022\MrsChatServer\bin\x64\Release\net8.0\MrsChatServer.dll
+C:\Users\carlos.araujo\Documents\Visual Studio 2022\MrsChatServer\bin\x64\Release\net8.0\MrsChatServer.pdb
+C:\Users\carlos.araujo\Documents\Visual Studio 2022\MrsChatServer\obj\x64\Release\net8.0\MrsChatServer.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\carlos.araujo\Documents\Visual Studio 2022\MrsChatServer\obj\x64\Release\net8.0\MrsChatServer.AssemblyInfoInputs.cache
+C:\Users\carlos.araujo\Documents\Visual Studio 2022\MrsChatServer\obj\x64\Release\net8.0\MrsChatServer.AssemblyInfo.cs
+C:\Users\carlos.araujo\Documents\Visual Studio 2022\MrsChatServer\obj\x64\Release\net8.0\MrsChatServer.csproj.CoreCompileInputs.cache
+C:\Users\carlos.araujo\Documents\Visual Studio 2022\MrsChatServer\obj\x64\Release\net8.0\MrsChatServer.dll
+C:\Users\carlos.araujo\Documents\Visual Studio 2022\MrsChatServer\obj\x64\Release\net8.0\refint\MrsChatServer.dll
+C:\Users\carlos.araujo\Documents\Visual Studio 2022\MrsChatServer\obj\x64\Release\net8.0\MrsChatServer.pdb
+C:\Users\carlos.araujo\Documents\Visual Studio 2022\MrsChatServer\obj\x64\Release\net8.0\MrsChatServer.genruntimeconfig.cache
+C:\Users\carlos.araujo\Documents\Visual Studio 2022\MrsChatServer\obj\x64\Release\net8.0\ref\MrsChatServer.dll
