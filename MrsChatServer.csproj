@@ -7,7 +7,7 @@
     <Nullable>enable</Nullable>
     <ApplicationIcon>icon.ico</ApplicationIcon>
     <Platforms>AnyCPU;x64</Platforms>
-    <Version>2.1.0</Version>
+    <Version>2.3.0</Version>
     <!-- Roda no .NET 8 ou em qualquer versão mais nova instalada (ex.: só o .NET 10). -->
     <RollForward>Major</RollForward>
   </PropertyGroup>

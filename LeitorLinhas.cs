@@ -42,6 +42,8 @@ sealed class LeitorLinhas
             int nl = Array.IndexOf(_buffer, (byte)'\n', _inicio, _fim - _inicio);
             if (nl >= 0)
             {
+                if (_linha.Length + (nl - _inicio) > _tamanhoMaximo)
+                    throw new InvalidDataException($"Linha maior que {_tamanhoMaximo} bytes.");
                 _linha.Write(_buffer, _inicio, nl - _inicio);
                 _inicio = nl + 1;
                 return Decodificar();

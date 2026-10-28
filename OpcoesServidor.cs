@@ -11,6 +11,13 @@ sealed class OpcoesServidor
     public int MaxClientes { get; set; } = 50;
     public string Sala { get; set; } = "MrsChat";
 
+    /// <summary>Aceita clientes antigos, que não sabem cifrar (v2.2 ou anteriores).</summary>
+    public bool AceitarSemCripto { get; set; }
+    /// <summary>Arquivo da chave de identidade (padrão: MrsChatServer.chave).</summary>
+    public string? ArquivoChave { get; set; }
+    /// <summary>Log linha a linha em vez do painel.</summary>
+    public bool Simples { get; set; }
+
     /// <summary>Abre um túnel público (bore) para aceitar clientes de fora da rede local.</summary>
     public bool Publico { get; set; }
     public string RelayHost { get; set; } = RelayPadrao;
@@ -59,6 +66,9 @@ sealed class OpcoesServidor
                 case "senha": Senha = valor.Length > 0 ? valor : null; break;
                 case "max_clientes": MaxClientes = LerInteiro(valor, origem, 1, 10_000); break;
                 case "sala": if (valor.Length > 0) Sala = LerSala(valor, origem); break;
+                case "aceitar_sem_cripto": AceitarSemCripto = LerBooleano(valor, origem); break;
+                case "chave": ArquivoChave = valor.Length > 0 ? valor : null; break;
+                case "interface": Simples = valor.Equals("simples", StringComparison.OrdinalIgnoreCase); break;
                 case "publico": Publico = LerBooleano(valor, origem); break;
                 case "relay": DefinirRelay(valor, origem); break;
                 case "relay_segredo": RelaySegredo = valor.Length > 0 ? valor : null; break;
@@ -87,6 +97,9 @@ sealed class OpcoesServidor
                 case "--senha": Senha = Valor(); break;
                 case "--max-clientes": MaxClientes = LerInteiro(Valor(), a, 1, 10_000); break;
                 case "--sala": Sala = LerSala(Valor(), a); break;
+                case "--aceitar-sem-cripto": AceitarSemCripto = true; break;
+                case "--chave": ArquivoChave = Valor(); break;
+                case "--simples": Simples = true; break;
                 case "--publico" or "--public": Publico = true; break;
                 case "--relay": DefinirRelay(Valor(), a); Publico = true; break;
                 case "--relay-segredo": RelaySegredo = Valor(); break;
@@ -172,6 +185,11 @@ sealed class OpcoesServidor
               --relay-segredo <s>  Segredo do relay, se ele exigir (bore server --secret)
               --porta-publica <n>  Pede uma porta específica no relay (padrão: qualquer)
 
+          Criptografia (obrigatória por padrão):
+              --chave <arquivo>    Chave de identidade do servidor (padrão: MrsChatServer.chave, criada se não existir)
+              --aceitar-sem-cripto Aceita também clientes antigos, sem criptografia
+
+              --simples            Log linha a linha em vez do painel
           -h, --ajuda              Mostra esta ajuda
           -v, --versao             Mostra a versão
 
@@ -184,6 +202,9 @@ sealed class OpcoesServidor
           relay=bore.pub
           relay_segredo=
           porta_publica=0
+          chave=MrsChatServer.chave
+          aceitar_sem_cripto=nao
+          interface=painel        (ou: simples)
 
         Exemplos:
           MrsChatServer --porta 9000

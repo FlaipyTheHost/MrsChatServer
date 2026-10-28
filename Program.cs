@@ -3,9 +3,13 @@ using System.Net.Sockets;
 using MrsChatServer;
 
 OpcoesServidor op;
+IdentidadeServidor identidade;
 try
 {
     op = OpcoesServidor.Carregar(args);
+    if (op.MostrarAjuda) { Console.WriteLine(OpcoesServidor.TextoAjuda); return 0; }
+    if (op.MostrarVersao) { Console.WriteLine($"MrsChatServer {Protocolo.Versao}"); return 0; }
+    identidade = IdentidadeServidor.Carregar(op.ArquivoChave);
 }
 catch (ErroDeOpcao ex)
 {
@@ -15,16 +19,17 @@ catch (ErroDeOpcao ex)
     return 2;
 }
 
-if (op.MostrarAjuda) { Console.WriteLine(OpcoesServidor.TextoAjuda); return 0; }
-if (op.MostrarVersao) { Console.WriteLine($"MrsChatServer {Protocolo.Versao}"); return 0; }
-
-Log.Destaque($"MrsChatServer v{Protocolo.Versao}");
-Log.Destaque("--------------------------------------------");
-
 using var cts = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
 
-var servidor = new ServidorChat(op);
+bool comPainel = !op.Simples && PainelServidor.Disponivel();
+if (!comPainel)
+{
+    Log.Destaque($"MrsChatServer v{Protocolo.Versao}");
+    Log.Destaque("--------------------------------------------");
+}
+
+var servidor = new ServidorChat(op, identidade);
 Task tarefaServidor;
 try
 {
@@ -39,7 +44,17 @@ catch (SocketException ex) when (ex.SocketErrorCode == SocketError.AddressAlread
     return 1;
 }
 
+var amostragem = Telemetria.AmostrarAsync(cts.Token);
+
 Log.Info($"Sala: {op.Sala}" + (op.Senha is not null ? " (protegida por senha)" : ""));
+Log.Info(identidade.Nova
+    ? $"Chave do servidor criada em {identidade.Caminho}. Guarde este arquivo: ele é a identidade do servidor."
+    : $"Chave do servidor: {identidade.Caminho}");
+Log.Destaque($"Impressão digital: {identidade.ImpressaoCompleta}");
+Log.Info("Os clientes veem o mesmo código. Se o de alguém for diferente, a conexão dessa pessoa foi interceptada.");
+Log.Info(op.AceitarSemCripto
+    ? "Clientes antigos, sem criptografia, são aceitos (--aceitar-sem-cripto)."
+    : "Criptografia obrigatória: clientes antigos (v2.2 ou anteriores) são recusados.");
 MostrarEnderecosLocais(op.Porta);
 
 TunelBore? tunel = null;
@@ -63,11 +78,31 @@ else
     Log.Info("Para aceitar amigos fora da sua rede (inclusive atrás de CGNAT), use --publico.");
 }
 
-Log.Info("Digite /ajuda para ver os comandos do console. Ctrl+C encerra.");
+bool ExecutarComando(string linha) => ComandoAdmin(linha, servidor, tunel);
 
-// Console de administração. Se não houver terminal (serviço, nohup), apenas espera.
-_ = Task.Run(() => ConsoleAdmin(servidor, tunel, cts));
+PainelServidor? painel = null;
+if (comPainel)
+{
+    Log.Info("Digite /ajuda no console para ver os comandos.");
+    painel = new PainelServidor(servidor, op, identidade, () => tunel?.EnderecoPublico, ExecutarComando, cts);
+}
+else
+{
+    Log.Info("Digite /ajuda para ver os comandos do console. Ctrl+C encerra.");
+    // Console de administração. Se não houver terminal (serviço, nohup), apenas espera.
+    _ = Task.Run(() =>
+    {
+        while (!cts.IsCancellationRequested)
+        {
+            string? linha;
+            try { linha = Console.ReadLine(); } catch (IOException) { return; }
+            if (linha is null) return; // sem entrada (ex.: rodando em segundo plano)
+            if (linha.Trim().Length > 0 && !ExecutarComando(linha.Trim())) { cts.Cancel(); return; }
+        }
+    });
+}
 
+int codigo = 0;
 try
 {
     await tarefaServidor;
@@ -75,75 +110,61 @@ try
 catch (Exception ex) when (!cts.IsCancellationRequested)
 {
     Log.Erro($"O servidor parou: {ex.Message}");
-    return 1;
+    codigo = 1;
 }
 
+painel?.Dispose();
 Log.Info("Encerrando...");
 await servidor.EncerrarTodosAsync("O servidor está sendo encerrado.");
 await Task.WhenAny(tarefaTunel, Task.Delay(1000));
-return 0;
+await amostragem;
+identidade.Dispose();
+return codigo;
 
 // ---------------------------------------------------------------------------
 
-static void ConsoleAdmin(ServidorChat servidor, TunelBore? tunel, CancellationTokenSource cts)
+/// <returns>false para encerrar o servidor.</returns>
+static bool ComandoAdmin(string linha, ServidorChat servidor, TunelBore? tunel)
 {
-    while (!cts.IsCancellationRequested)
+    if (!linha.StartsWith('/'))
     {
-        string? linha;
-        try { linha = Console.ReadLine(); }
-        catch (IOException) { return; }
-        if (linha is null) return; // sem entrada (ex.: rodando em segundo plano)
-
-        linha = linha.Trim();
-        if (linha.Length == 0) continue;
-
-        if (!linha.StartsWith('/'))
-        {
-            servidor.Anunciar(linha);
-            Log.Info($"Anúncio enviado: {linha}");
-            continue;
-        }
-
-        int espaco = linha.IndexOf(' ');
-        string cmd = (espaco < 0 ? linha : linha[..espaco]).ToLowerInvariant();
-        string resto = espaco < 0 ? "" : linha[(espaco + 1)..].Trim();
-
-        switch (cmd)
-        {
-            case "/ajuda" or "/help":
-                Console.WriteLine("""
-                    Comandos do console do servidor:
-                      <texto>                     envia um anúncio para todos
-                      /usuarios                   lista quem está online
-                      /expulsar <nome> [motivo]   remove alguém da sala
-                      /endereco                   mostra os endereços de acesso
-                      /sair                       encerra o servidor
-                    """);
-                break;
-            case "/usuarios" or "/quem":
-                Log.Info(servidor.DescreverUsuarios());
-                break;
-            case "/expulsar" or "/kick":
-                if (resto.Length == 0) { Log.Aviso("Uso: /expulsar <nome> [motivo]"); break; }
-                int sp = resto.IndexOf(' ');
-                string nome = sp < 0 ? resto : resto[..sp];
-                string? motivo = sp < 0 ? null : resto[(sp + 1)..];
-                if (servidor.Expulsar(nome, motivo)) Log.Info($"{nome} foi removido.");
-                else Log.Aviso($"Usuário \"{nome}\" não encontrado.");
-                break;
-            case "/endereco" or "/ip":
-                if (tunel?.EnderecoPublico is { } pub) Log.Destaque($"Público: {pub}");
-                else if (tunel is not null) Log.Aviso("Túnel público ainda não está ativo.");
-                else Log.Info("Túnel público desligado (use --publico).");
-                break;
-            case "/sair" or "/exit" or "/quit":
-                cts.Cancel();
-                return;
-            default:
-                Log.Aviso($"Comando desconhecido: {cmd}. Digite /ajuda.");
-                break;
-        }
+        servidor.Anunciar(linha);
+        Log.Info($"Anúncio enviado: {linha}");
+        return true;
     }
+
+    int espaco = linha.IndexOf(' ');
+    string cmd = (espaco < 0 ? linha : linha[..espaco]).ToLowerInvariant();
+    string resto = espaco < 0 ? "" : linha[(espaco + 1)..].Trim();
+
+    switch (cmd)
+    {
+        case "/ajuda" or "/help":
+            Log.Info("Comandos: <texto> = anúncio para todos · /usuarios · /expulsar <nome> [motivo] · /endereco · /sair");
+            break;
+        case "/usuarios" or "/quem":
+            Log.Info(servidor.DescreverUsuarios());
+            break;
+        case "/expulsar" or "/kick":
+            if (resto.Length == 0) { Log.Aviso("Uso: /expulsar <nome> [motivo]"); break; }
+            int sp = resto.IndexOf(' ');
+            string nome = sp < 0 ? resto : resto[..sp];
+            string? motivo = sp < 0 ? null : resto[(sp + 1)..];
+            if (servidor.Expulsar(nome, motivo)) Log.Info($"{nome} foi removido.");
+            else Log.Aviso($"Usuário \"{nome}\" não encontrado.");
+            break;
+        case "/endereco" or "/ip":
+            if (tunel?.EnderecoPublico is { } pub) Log.Destaque($"Público: {pub}");
+            else if (tunel is not null) Log.Aviso("Túnel público ainda não está ativo.");
+            else Log.Info("Túnel público desligado (use --publico).");
+            break;
+        case "/sair" or "/exit" or "/quit":
+            return false;
+        default:
+            Log.Aviso($"Comando desconhecido: {cmd}. Digite /ajuda.");
+            break;
+    }
+    return true;
 }
 
 static void MostrarEnderecosLocais(int porta)

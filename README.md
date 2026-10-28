@@ -4,6 +4,24 @@
 
 # <img src="captura.gif">
 
+## Novidades da v2.3
+
+- **Criptografia obrigatória** entre clientes e servidor (ECDH P-256 + AES-256-GCM, com a identidade do servidor assinando a troca de chaves). O relay do `--publico` e qualquer um no caminho não leem nem alteram as mensagens.
+- **Chave de identidade** criada na primeira execução (`MrsChatServer.chave`). A impressão digital aparece no painel; os clientes mostram o mesmo código para todos compararem.
+- **Painel de central de comunicação**: CPU e RAM do app e do sistema, tráfego em KB com gráfico, operadores conectados, tráfego recente **só em bytes cifrados** e registro de eventos.
+- A tela do servidor nunca mostra o texto das mensagens, nem no modo `--simples`.
+
+<img src="captura-painel.png">
+
+### Sobre a criptografia
+
+É uma criptografia **entre cada cliente e o servidor**, não ponta a ponta: o servidor decifra para repassar as mensagens. O painel esconde o conteúdo, mas quem controla o processo do servidor poderia, tecnicamente, ler. Proteções:
+
+- Ninguém no caminho (rede, Wi-Fi, relay bore) consegue ler, alterar, repetir ou reordenar mensagens: qualquer linha adulterada derruba a conexão.
+- Os clientes guardam a chave de cada servidor e recusam a conexão se ela mudar (como o SSH).
+- **Guarde o arquivo `MrsChatServer.chave`**: ele é a identidade do servidor. Se ele for apagado, outro é criado e os clientes vão avisar que a chave mudou.
+- Clientes antigos (v2.2 ou anteriores) não sabem cifrar e são recusados. Para aceitá-los mesmo assim, use `--aceitar-sem-cripto`; a sala é avisada e o tráfego deles vai em texto puro.
+
 ## Novidades da v2.1
 
 - Nome da sala com `--sala`, exibido no cabeçalho do cliente MrsChat v2.1, que também usa o servidor para preencher o painel de integrantes.
@@ -56,6 +74,9 @@ dotnet MrsChatServer.dll [opções]
 | `--relay <host[:porta]>` | Usa outro relay bore (ex.: um VPS seu) |
 | `--relay-segredo <s>` | Segredo do relay, se ele exigir |
 | `--porta-publica <n>` | Pede uma porta específica no relay |
+| `--chave <arquivo>` | Chave de identidade (padrão: `MrsChatServer.chave`, criada se não existir) |
+| `--aceitar-sem-cripto` | Aceita também clientes antigos, sem criptografia |
+| `--simples` | Log linha a linha em vez do painel (bom para rodar como serviço) |
 | `-h`, `--ajuda` | Mostra a ajuda |
 
 A forma antiga `dotnet MrsChatServer.dll 9000` continua funcionando. Tudo também pode ficar no `MrsChatServer.conf`, e os argumentos têm prioridade sobre ele.

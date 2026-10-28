@@ -6,7 +6,7 @@
 /// </summary>
 static class Protocolo
 {
-    public const string Versao = "2.1";
+    public const string Versao = "2.3";
 
     /// <summary>Prefixo das mensagens geradas pelo servidor.</summary>
     public const string PrefixoServidor = "[servidor] ";

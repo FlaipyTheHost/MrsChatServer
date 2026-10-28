@@ -15,7 +15,16 @@ sealed class ServidorChat
     private readonly ConcurrentDictionary<int, Sessao> _sessoes = new();
     private readonly object _travaNomes = new();
 
-    public ServidorChat(OpcoesServidor op) => _op = op;
+    private readonly IdentidadeServidor _identidade;
+
+    public ServidorChat(OpcoesServidor op, IdentidadeServidor identidade)
+    {
+        _op = op;
+        _identidade = identidade;
+    }
+
+    /// <summary>Fotografia das sessões para o painel.</summary>
+    public List<Sessao> Sessoes => _sessoes.Values.Where(x => x.Nome.Length > 0).OrderBy(x => x.ConectadoEm).ToList();
 
     public int Conectados => _sessoes.Values.Count(s => s.Nome.Length > 0);
 
@@ -62,6 +71,9 @@ sealed class ServidorChat
         bool entrou = false;
         try
         {
+            // Negocia antes de tudo, para que até o aviso de sala cheia vá cifrado.
+            if (!await NegociarAsync(s)) return;
+
             if (Conectados >= _op.MaxClientes)
             {
                 s.Enviar(Protocolo.PrefixoServidor + "A sala está cheia. Tente mais tarde.");
@@ -77,10 +89,12 @@ sealed class ServidorChat
             s.Enviar(Protocolo.PrefixoSeuNome + s.Nome);
             s.Enviar(Protocolo.PrefixoSala + _op.Sala);
             Divulgar($"{s.Nome} conectou-se.", s); // mesmo texto da v1
+            if (!s.Cifrada)
+                Divulgar($"{Protocolo.PrefixoServidor}Atenção: {s.Nome} usa um cliente sem criptografia; o que trocarem com ele trafega em texto puro.", s);
 
             while (true)
             {
-                string? linha = await s.Leitor.LerLinhaAsync(s.Token);
+                string? linha = await s.LerLinhaAsync(s.Token);
                 if (linha is null) break;
                 linha = LimparTexto(linha).Trim();
                 if (linha.Length == 0) continue;
@@ -94,7 +108,7 @@ sealed class ServidorChat
                 }
 
                 string formatada = $"{s.Nome}: {linha}";
-                Log.Chat(formatada);
+                RegistrarMensagem(s, "SALA", linha);
                 Divulgar(formatada, s);
             }
         }
@@ -119,6 +133,42 @@ sealed class ServidorChat
                 Divulgar($"{s.Nome} desconectou.", s);
             }
         }
+    }
+
+    /// <summary>
+    /// A 1ª linha diz se o cliente quer criptografia (MRS-CRIPTO/1) ou é antigo (a linha já é o nome).
+    /// </summary>
+    private async Task<bool> NegociarAsync(Sessao s)
+    {
+        string? primeira = await LerComPrazoAsync(s, TempoParaNome, bruta: true);
+        if (primeira is null) return false;
+
+        if (CanalSeguro.EhAbertura(primeira))
+        {
+            try
+            {
+                var (canal, resposta) = CanalSeguro.ResponderComoServidor(primeira, _identidade.Chave);
+                s.AtivarCanal(canal, resposta);
+                return true;
+            }
+            catch (Exception ex) when (ex is CryptographicException or FormatException)
+            {
+                Log.Aviso($"Aperto de mãos inválido de {s.Endereco}: {ex.Message}");
+                return false;
+            }
+        }
+
+        if (!_op.AceitarSemCripto)
+        {
+            s.Enviar(Protocolo.PrefixoServidor + "Este servidor exige criptografia. Atualize para o MrsChat v2.3 ou mais novo.");
+            await s.EncerrarAposEnviarAsync(TimeSpan.FromSeconds(2));
+            Log.Aviso($"Recusado cliente sem criptografia de {s.Endereco}.");
+            return false;
+        }
+
+        Log.Aviso($"{s.Endereco} entrou SEM criptografia (cliente antigo).");
+        s.Devolver(primeira);
+        return true;
     }
 
     /// <summary>Lê o nome (1ª linha, igual à v1) e, se configurado, a senha.</summary>
@@ -160,13 +210,13 @@ sealed class ServidorChat
         return true;
     }
 
-    private static async Task<string?> LerComPrazoAsync(Sessao s, TimeSpan prazo)
+    private static async Task<string?> LerComPrazoAsync(Sessao s, TimeSpan prazo, bool bruta = false)
     {
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(s.Token);
         cts.CancelAfter(prazo);
         try
         {
-            return await s.Leitor.LerLinhaAsync(cts.Token);
+            return bruta ? await s.LerLinhaBrutaAsync(cts.Token) : await s.LerLinhaAsync(cts.Token);
         }
         catch (OperationCanceledException) when (!s.Token.IsCancellationRequested)
         {
@@ -209,7 +259,7 @@ sealed class ServidorChat
             case "/me":
                 if (resto.Length == 0) { s.Enviar(Protocolo.PrefixoServidor + "Uso: /me <ação>"); return true; }
                 string acao = $"* {s.Nome} {resto}";
-                Log.Chat(acao);
+                RegistrarMensagem(s, "SALA", resto);
                 Divulgar(acao, s);
                 return true;
 
@@ -271,6 +321,7 @@ sealed class ServidorChat
         var destino = BuscarPorNome(alvo);
         if (destino is null) { s.Enviar($"{Protocolo.PrefixoServidor}Usuário \"{alvo}\" não está online."); return; }
 
+        RegistrarMensagem(s, $"PRIV→{destino.Nome}", texto);
         destino.Enviar($"(privado) {s.Nome}: {texto}");
         s.Enviar($"(privado para {destino.Nome}) {texto}");
     }
@@ -314,6 +365,26 @@ sealed class ServidorChat
             return "O nome não pode começar com / [ * ou (.";
         if (nome.IndexOfAny([':', ',']) >= 0) return "O nome não pode ter \":\" nem \",\".";
         return null;
+    }
+
+    /// <summary>
+    /// Registra que uma mensagem passou, guardando só os bytes cifrados como chegaram pela rede.
+    /// O texto em claro não vai para a tela nem para o log.
+    /// </summary>
+    private static void RegistrarMensagem(Sessao s, string destino, string textoClaro)
+    {
+        Interlocked.Increment(ref s.MensagensEnviadas);
+        string? cifrada = s.Cifrada ? s.UltimaLinhaCifrada : null;
+        Telemetria.RegistrarTrafego(s.Nome, destino, cifrada, Encoding.UTF8.GetByteCount(textoClaro));
+        if (cifrada is not null)
+        {
+            byte[] b = Convert.FromBase64String(cifrada);
+            Log.Trafego($"{s.Nome} ▸ {destino} · {b.Length} B cifrados · {Convert.ToHexString(b, 0, Math.Min(12, b.Length))}…");
+        }
+        else
+        {
+            Log.Trafego($"{s.Nome} ▸ {destino} · {Encoding.UTF8.GetByteCount(textoClaro)} B SEM CRIPTOGRAFIA (conteúdo oculto)");
+        }
     }
 
     /// <summary>Espaços viram "_" para o nome funcionar em /msg (na v1 eram permitidos).</summary>
