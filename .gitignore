@@ -1,0 +1,6 @@
+# Saídas de build e de empacotamento
+publicar/
+dist/
+
+# Chave privada do servidor: nunca versionar
+MrsChatServer.chave

@@ -33,7 +33,8 @@ sealed class PainelServidor : IDisposable
     private const int Branco = (int)ConsoleColor.White;
     private const int Preto = (int)ConsoleColor.Black;
 
-    private static readonly CultureInfo Br = CultureInfo.GetCultureInfo("pt-BR");
+    // Vírgula decimal sem depender de dados de cultura (o binário roda com InvariantGlobalization, sem ICU).
+    private static readonly NumberFormatInfo Br = new() { NumberDecimalSeparator = ",", NumberGroupSeparator = "." };
 
     private readonly record struct Celula(string? T, int Fg, int Bg, bool Negrito)
     {

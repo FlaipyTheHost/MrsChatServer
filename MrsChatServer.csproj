@@ -10,6 +10,8 @@
     <Version>2.3.0</Version>
     <!-- Roda no .NET 8 ou em qualquer versão mais nova instalada (ex.: só o .NET 10). -->
     <RollForward>Major</RollForward>
+    <!-- Sem dependência da libicu: o app só usa formatação fixa, então o binário autocontido roda em qualquer distro. -->
+    <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
 
   <ItemGroup>
