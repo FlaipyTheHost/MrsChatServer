@@ -75,6 +75,7 @@ sealed class ServidorChat
             Log.Sucesso($"Cliente conectado: {s.Descricao}");
             s.Enviar($"{Protocolo.PrefixoServidor}Bem-vindo, {s.Nome}! {Conectados} usuário(s) online. Digite /ajuda para ver os comandos.");
             s.Enviar(Protocolo.PrefixoSeuNome + s.Nome);
+            s.Enviar(Protocolo.PrefixoSala + _op.Sala);
             Divulgar($"{s.Nome} conectou-se.", s); // mesmo texto da v1
 
             while (true)
@@ -311,7 +312,7 @@ sealed class ServidorChat
         if (nome.Length > Protocolo.TamanhoMaximoNome) return $"Nome muito longo (máximo {Protocolo.TamanhoMaximoNome} caracteres).";
         if (nome.StartsWith('/') || nome.StartsWith('[') || nome.StartsWith('*') || nome.StartsWith('('))
             return "O nome não pode começar com / [ * ou (.";
-        if (nome.Contains(':')) return "O nome não pode ter \":\".";
+        if (nome.IndexOfAny([':', ',']) >= 0) return "O nome não pode ter \":\" nem \",\".";
         return null;
     }
 

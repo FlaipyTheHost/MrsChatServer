@@ -4,6 +4,10 @@
 
 # <img src="captura.gif">
 
+## Novidades da v2.1
+
+- Nome da sala com `--sala`, exibido no cabeçalho do cliente MrsChat v2.1, que também usa o servidor para preencher o painel de integrantes.
+
 ## Novidades da v2.0
 
 - **Acesso pela internet com `--publico`**, sem abrir porta no roteador. Funciona atrás de NAT e CGNAT.
@@ -45,6 +49,7 @@ dotnet MrsChatServer.dll [opções]
 | Opção | Descrição |
 |---|---|
 | `-p`, `--porta <n>` | Porta TCP local (padrão: 9000) |
+| `--sala <nome>` | Nome da sala mostrado aos clientes (padrão: MrsChat) |
 | `--senha <texto>` | Exige senha para entrar na sala |
 | `--max-clientes <n>` | Limite de usuários (padrão: 50) |
 | `--publico` | Abre um túnel público via `bore.pub` |

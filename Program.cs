@@ -39,7 +39,7 @@ catch (SocketException ex) when (ex.SocketErrorCode == SocketError.AddressAlread
     return 1;
 }
 
-if (op.Senha is not null) Log.Info("Sala protegida por senha.");
+Log.Info($"Sala: {op.Sala}" + (op.Senha is not null ? " (protegida por senha)" : ""));
 MostrarEnderecosLocais(op.Porta);
 
 TunelBore? tunel = null;

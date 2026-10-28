@@ -9,6 +9,7 @@ sealed class OpcoesServidor
     public int Porta { get; set; } = 9000;
     public string? Senha { get; set; }
     public int MaxClientes { get; set; } = 50;
+    public string Sala { get; set; } = "MrsChat";
 
     /// <summary>Abre um túnel público (bore) para aceitar clientes de fora da rede local.</summary>
     public bool Publico { get; set; }
@@ -57,6 +58,7 @@ sealed class OpcoesServidor
                 case "porta": Porta = LerPorta(valor, origem); break;
                 case "senha": Senha = valor.Length > 0 ? valor : null; break;
                 case "max_clientes": MaxClientes = LerInteiro(valor, origem, 1, 10_000); break;
+                case "sala": if (valor.Length > 0) Sala = LerSala(valor, origem); break;
                 case "publico": Publico = LerBooleano(valor, origem); break;
                 case "relay": DefinirRelay(valor, origem); break;
                 case "relay_segredo": RelaySegredo = valor.Length > 0 ? valor : null; break;
@@ -84,6 +86,7 @@ sealed class OpcoesServidor
                 case "-p" or "--porta": Porta = LerPorta(Valor(), a); break;
                 case "--senha": Senha = Valor(); break;
                 case "--max-clientes": MaxClientes = LerInteiro(Valor(), a, 1, 10_000); break;
+                case "--sala": Sala = LerSala(Valor(), a); break;
                 case "--publico" or "--public": Publico = true; break;
                 case "--relay": DefinirRelay(Valor(), a); Publico = true; break;
                 case "--relay-segredo": RelaySegredo = Valor(); break;
@@ -127,6 +130,13 @@ sealed class OpcoesServidor
         return null;
     }
 
+    private static string LerSala(string v, string origem)
+    {
+        v = new string(v.Where(c => !char.IsControl(c)).ToArray()).Trim();
+        if (v.Length == 0 || v.Length > 40) throw new ErroDeOpcao($"{origem}: nome da sala deve ter de 1 a 40 caracteres.");
+        return v;
+    }
+
     private static int LerPorta(string v, string origem) => LerInteiro(v, origem, 1, 65535);
 
     private static int LerInteiro(string v, string origem, int min, int max)
@@ -152,6 +162,7 @@ sealed class OpcoesServidor
 
         Opções:
           -p, --porta <n>          Porta TCP local (padrão: 9000)
+              --sala <nome>        Nome da sala, mostrado aos clientes (padrão: MrsChat)
               --senha <texto>      Exige senha para entrar na sala
               --max-clientes <n>   Limite de usuários conectados (padrão: 50)
 
@@ -166,6 +177,7 @@ sealed class OpcoesServidor
 
         Arquivo {ArquivoConfiguracao} (opcional; argumentos têm prioridade):
           porta=9000
+          sala=MrsChat
           senha=
           max_clientes=50
           publico=nao
