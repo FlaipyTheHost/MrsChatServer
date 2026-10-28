@@ -1,0 +1,135 @@
+# Gera os pacotes de Windows e Linux e publica uma release no GitHub.
+#
+# Como usar:
+#   git tag v2.3.0 && git push origin v2.3.0     → cria a release v2.3.0 com os pacotes
+#   Actions → Release → Run workflow              → só gera os pacotes (ficam como artefato da execução)
+#
+# Os executáveis são autocontidos e de arquivo único: quem baixa não precisa instalar o .NET.
+# O .exe é gerado e testado num runner Windows (assim ele leva o ícone e é executado de verdade);
+# o runner Linux gera o binário Linux e monta todos os pacotes.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      versao:
+        description: "Versão dos pacotes (ex.: 2.3.0)"
+        required: true
+
+permissions:
+  contents: write   # necessário para criar a release
+
+env:
+  PROJETO: MrsChatServer
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  # Opções comuns do publish (autocontido, arquivo único, sem .pdb)
+  OPCOES_PUBLISH: >-
+    -c Release --self-contained true
+    -p:PublishSingleFile=true
+    -p:IncludeNativeLibrariesForSelfExtract=true
+    -p:EnableCompressionInSingleFile=true
+    -p:DebugType=none
+
+jobs:
+  versao:
+    runs-on: ubuntu-latest
+    outputs:
+      versao: ${{ steps.v.outputs.versao }}
+    steps:
+      - name: Definir a versão
+        id: v
+        env:
+          ENTRADA: ${{ inputs.versao }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then v="$ENTRADA"; else v="${GITHUB_REF_NAME#v}"; fi
+          if ! [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.]+)?$ ]]; then
+            echo "::error::Versão inválida: '$v' (use algo como 2.3.0)"; exit 1
+          fi
+          echo "versao=$v" >> "$GITHUB_OUTPUT"
+          echo "Versão: $v"
+
+  windows:
+    needs: versao
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Publicar para Windows
+        env:
+          VERSAO: ${{ needs.versao.outputs.versao }}
+        run: |
+          rm -rf bin obj   # bin/ e obj/ antigos versionados no repositório não entram no build
+          # shellcheck disable=SC2086  # OPCOES_PUBLISH é uma lista de opções
+          dotnet publish "$PROJETO.csproj" -r win-x64 -o publicar/win-x64 $OPCOES_PUBLISH -p:Version="$VERSAO"
+          ls -l publicar/win-x64
+      - name: Testar o .exe
+        run: ./publicar/win-x64/"$PROJETO".exe --versao
+      - uses: actions/upload-artifact@v4
+        with:
+          name: win-x64
+          path: publicar/win-x64
+
+  pacotes:
+    needs: [versao, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Instalar ferramentas de empacotamento
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq rpm zip
+
+      - name: Publicar para Linux
+        env:
+          VERSAO: ${{ needs.versao.outputs.versao }}
+        run: |
+          rm -rf bin obj
+          # shellcheck disable=SC2086
+          dotnet publish "$PROJETO.csproj" -r linux-x64 -o publicar/linux-x64 $OPCOES_PUBLISH -p:Version="$VERSAO"
+          ls -l publicar/linux-x64
+
+      - name: Testar o binário Linux
+        run: ./publicar/linux-x64/"$PROJETO" --versao
+
+      - name: Baixar o executável do Windows
+        uses: actions/download-artifact@v4
+        with:
+          name: win-x64
+          path: publicar/win-x64
+
+      - name: Empacotar (zip, tar.gz, deb, rpm)
+        env:
+          VERSAO: ${{ needs.versao.outputs.versao }}
+        run: ./empacotamento/empacotar.sh "$VERSAO" publicar dist
+
+      - name: Testar o .deb
+        run: |
+          sudo apt-get install -y -qq ./dist/*.deb
+          cmd=$(dpkg-deb -c dist/*.deb | awk '$6 ~ /^\.\/usr\/bin\/[^\/]+$/ {sub("^\\./usr/bin/", "", $6); print $6}')
+          "$cmd" --versao
+
+      - name: Guardar os pacotes como artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: pacotes-${{ needs.versao.outputs.versao }}
+          path: dist/*
+
+      - name: Publicar a release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
