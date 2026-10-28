@@ -153,7 +153,7 @@ git tag v2.3.0
 git push origin v2.3.0
 ```
 
-Ele também pode ser disparado à mão em **Actions → Release → Run workflow**. Nesse caso, os pacotes ficam como artefato da execução, sem criar release. O empacotamento é feito pelo [`empacotamento/empacotar.sh`](empacotamento/empacotar.sh), que também roda localmente.
+Ele também pode ser disparado à mão em **Actions -> Release -> Run workflow**. Nesse caso, os pacotes ficam como artefato da execução, sem criar release. O empacotamento é feito pelo [`empacotamento/empacotar.sh`](empacotamento/empacotar.sh), que também roda localmente.
 
 ## Licença
 
